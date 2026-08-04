@@ -1024,7 +1024,7 @@ class Qwen3NextFullAttention(nnx.Module):
         use_qk_norm=cfg.use_qk_norm,
         query_pre_attn_scalar=scaling_factor,
         model_mode=model_mode,
-        use_mrope=cfg.use_mrope,
+        use_mrope=getattr(cfg, "use_mrope", False),
         mrope_section=cfg.mrope_section,
         rngs=rngs,
     )
@@ -1420,7 +1420,7 @@ class AttentionWithNorm(nnx.Module):
         use_qk_norm=config.use_qk_norm,
         query_pre_attn_scalar=query_pre_attn_scalar,
         model_mode=model_mode,
-        use_mrope=config.use_mrope,
+        use_mrope=getattr(config, "use_mrope", False),
         mrope_section=config.mrope_section,
         rngs=rngs,
     )
