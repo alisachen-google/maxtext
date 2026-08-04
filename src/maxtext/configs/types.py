@@ -3927,6 +3927,7 @@ class RLConfig(
     DcnParallelism,
     HardwareAndMesh,
     ModelArchitecture,
+    MultimodalGeneral,
     MoBa,
     # Positional Embeddings
     PositionalEmbedding,
