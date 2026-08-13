@@ -3928,6 +3928,7 @@ class RLConfig(
     HardwareAndMesh,
     ModelArchitecture,
     MultimodalGeneral,
+    VisionTower,
     MoBa,
     # Positional Embeddings
     PositionalEmbedding,
