@@ -20,6 +20,7 @@ model name. This allows for easy extension to support new models.
 """
 from maxtext.integration.tunix.weight_mapping.deepseek3 import DEEPSEEK_VLLM_MAPPING
 from maxtext.integration.tunix.weight_mapping.gemma3 import GEMMA3_VLLM_MAPPING
+from maxtext.integration.tunix.weight_mapping.gemma4 import build_gemma4_vllm_mapping
 from maxtext.integration.tunix.weight_mapping.gpt_oss import GPT_OSS_VLLM_MAPPING
 from maxtext.integration.tunix.weight_mapping.llama3 import LLAMA3_VLLM_MAPPING
 from maxtext.integration.tunix.weight_mapping.qwen2 import QWEN2_VLLM_MAPPING
@@ -38,6 +39,8 @@ class StandaloneVllmWeightMapping:
       return QWEN3_VLLM_MAPPING
     elif name.startswith("gemma3"):
       return GEMMA3_VLLM_MAPPING
+    elif name.startswith("gemma4"):
+      return build_gemma4_vllm_mapping(name)
     elif name.startswith("deepseek3"):
       return DEEPSEEK_VLLM_MAPPING
     elif name.startswith("gpt-oss"):

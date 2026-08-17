@@ -141,6 +141,13 @@ class VllmWeightMapping:
 
     return {}
 
+  def preprocess_src_state_fn(self):
+    """Optional source-state preprocessor (e.g. fusing gate/up for merged targets)."""
+    if self.use_standalone_mappings:
+      return getattr(STANDALONE_VLLM_WEIGHT_MAPPING[self.model_name], "preprocess_src_state_fn", lambda: None)()
+
+    return None
+
   def to_hf_hook_fns(self):
     """Returns a mapping from MaxText parameter names to transformation functions."""
     if self.use_standalone_mappings:

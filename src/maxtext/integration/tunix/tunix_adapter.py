@@ -143,3 +143,10 @@ class TunixMaxTextAdapter(nnx.Module):
       return {}
 
     return self._vllm_weight_mapping.lora_to_hf_mappings()
+
+  def preprocess_src_state(self):
+    """Forwarded by tunix MappingConfig.from_model; returns a callable or None."""
+    if self.use_no_op_mappings:
+      return None
+
+    return self._vllm_weight_mapping.preprocess_src_state_fn()
