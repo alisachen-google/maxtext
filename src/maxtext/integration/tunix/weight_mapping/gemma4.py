@@ -153,19 +153,49 @@ def _build_mapping(model_name):
   return mapping
 
 
+def _interleave_for_shards(pieces, n_shards):
+  """[p0|p1|...] -> per-shard interleaved [p0_s0 p1_s0 ... | p0_s1 p1_s1 ... | ...].
+
+  Mirrors tpu_inference `reorder_concatenated_tensor_for_sharding` on the last dim,
+  which is the storage layout of JaxMergedColumnParallelLinear / JaxQKVParallelLinear.
+  """
+  import jax.numpy as jnp
+
+  if n_shards <= 1:
+    return jnp.concatenate(pieces, axis=-1)
+  lead = pieces[0].shape[:-1]
+  per = []
+  for p in pieces:
+    if p.shape[-1] % n_shards != 0:
+      raise ValueError(f"fused piece size {p.shape[-1]} not divisible by tp={n_shards}")
+    per.append(p.reshape(*lead, n_shards, p.shape[-1] // n_shards))
+  return jnp.concatenate(per, axis=-1).reshape(*lead, -1)
+
+
+def _native_tp():
+  """Rollout tensor-parallel degree of the native sampler (env GEMMA4_NATIVE_TP, default 1)."""
+  import os as _os
+
+  try:
+    return max(1, int(_os.environ.get("GEMMA4_NATIVE_TP", "1")))
+  except ValueError:
+    return 1
+
+
 def _fuse_for_native(state):
   """Fuses mlp wi_0/wi_1 -> gate_up and attention q/k/v -> qkv for the native model.
 
-  The fused qkv kernel is 2D (hidden, q_size + k_size + v_size) in plain
-  [Q|K|V] feature order — JaxQKVParallelLinear's layout at tensor-parallel
-  size 1 (our rollout_tensor_parallelism=1; the merged layer interleaves
-  shards at TP>1, which this fusion does NOT model). KV-shared layers have no
+  The fused kernels are 2D (hidden, sum(out_sizes)) laid out INTERLEAVED PER TP
+  SHARD (shard i = [gate_i|up_i] / [q_i|k_i|v_i]) for tp = GEMMA4_NATIVE_TP, which
+  is how tpu_inference's merged column-parallel linears store their kernel
+  (plain [Q|K|V] order is the tp=1 special case). KV-shared layers have no
   MaxText k/v weights; their sections are zero-filled (computed but never
   consumed — the layer reads the share target's KV cache).
   """
   import jax.numpy as jnp
   from flax import nnx
 
+  tp = _native_tp()
   flat = dict(state.flat_state())
   # kv head count is uniform across layers that have k/v (gemma4: 1).
   kv_heads = 1
@@ -180,7 +210,7 @@ def _fuse_for_native(state):
     if len(parts) >= 3 and parts[-3] == "mlp" and parts[-2] in ("wi_0", "wi_1"):
       if parts[-2] == "wi_0":
         wi_1 = flat[(*path[:-2], "wi_1", path[-1])]
-        fused = jnp.concatenate([var.value, wi_1.value], axis=-1)
+        fused = _interleave_for_shards([var.value, wi_1.value], tp)
         out.append(((*path[:-2], "gate_up", path[-1]), var.replace(value=fused)))
       continue  # drop wi_0/wi_1 from the pushed state
     if len(parts) >= 3 and parts[-3] == "self_attention" and parts[-2] in ("query", "key", "value"):
@@ -193,7 +223,7 @@ def _fuse_for_native(state):
         v_path = (*path[:-2], "value", path[-1])
         k2 = flat[k_path].value.reshape(hidden, -1) if k_path in flat else jnp.zeros(kv_shape, q.dtype)
         v2 = flat[v_path].value.reshape(hidden, -1) if v_path in flat else jnp.zeros(kv_shape, q.dtype)
-        fused = jnp.concatenate([q2, k2, v2], axis=-1)
+        fused = _interleave_for_shards([q2, k2, v2], tp)
         out.append(((*path[:-2], "qkv", path[-1]), var.replace(value=fused)))
       continue  # drop query/key/value from the pushed state
     out.append((path, var))
